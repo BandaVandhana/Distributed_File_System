@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DFS Control Panel</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:        #080c10;
+  --surface:   #0d1117;
+  --panel:     #111820;
+  --border:    #1e2d3d;
+  --accent:    #00d4ff;
+  --accent2:   #ff6b35;
+  --green:     #39d353;
+  --yellow:    #f0c040;
+  --red:       #ff4757;
+  --purple:    #bd93f9;
+  --dim:       #4a5568;
+  --text:      #c9d1d9;
+  --textdim:   #6e7681;
+  --hot:       #ff4757;
+  --warm:      #f0c040;
+  --cold:      #00d4ff;
+  --mono: 'JetBrains Mono', monospace;
+  --display: 'Syne', sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* scanline overlay */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,212,255,0.012) 2px, rgba(0,212,255,0.012) 4px);
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* ── Header ── */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  position: sticky; top: 0; z-index: 100;
+}
+.header-left { display: flex; align-items: center; gap: 16px; }
+.logo {
+  font-family: var(--display);
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: var(--accent);
+  text-transform: uppercase;
+}
+.logo span { color: var(--text); }
+.system-id {
+  font-size: 10px;
+  color: var(--dim);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  border-left: 1px solid var(--border);
+  padding-left: 16px;
+}
+.status-bar { display: flex; gap: 20px; align-items: center; }
+.stat-pill {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 4px; padding: 4px 10px;
+  font-size: 11px; color: var(--textdim);
+}
+.stat-pill strong { color: var(--accent); font-weight: 600; }
+.pulse {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--green);
+  animation: pulse 1.8s ease infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(57,211,83,0.4); }
+  50%       { opacity: 0.6; box-shadow: 0 0 0 5px rgba(57,211,83,0); }
+}
+
+/* ── Layout ── */
+.layout {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  grid-template-rows: auto auto 1fr;
+  gap: 0;
+  height: calc(100vh - 53px);
+}
+.main-col { display: flex; flex-direction: column; overflow: hidden; border-right: 1px solid var(--border); }
+.side-col { display: flex; flex-direction: column; overflow: hidden; }
+
+/* ── Panels ── */
+.panel {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+.panel-title {
+  font-family: var(--display);
+  font-size: 11px; font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--textdim);
+}
+.panel-title .icon { margin-right: 8px; }
+.panel-body { padding: 16px 18px; }
+
+/* ── Metrics Row ── */
+.metrics-row {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+.metric {
+  padding: 14px 16px;
+  border-right: 1px solid var(--border);
+  transition: background 0.2s;
+}
+.metric:last-child { border-right: none; }
+.metric:hover { background: rgba(0,212,255,0.04); }
+.metric-label { font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: var(--dim); margin-bottom: 6px; }
+.metric-value { font-size: 22px; font-weight: 700; font-family: var(--display); color: var(--accent); line-height: 1; }
+.metric-value.green  { color: var(--green); }
+.metric-value.yellow { color: var(--yellow); }
+.metric-value.red    { color: var(--red); }
+.metric-sub { font-size: 10px; color: var(--dim); margin-top: 4px; }
+
+/* ── Nodes Grid ── */
+.nodes-section { flex: 0 0 auto; overflow: visible; }
+.nodes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; padding: 16px 18px; }
+.node-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+.node-card::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  transition: opacity 0.2s;
+}
+.node-card.ONLINE::before    { background: var(--green); }
+.node-card.SUSPECTED::before { background: var(--yellow); }
+.node-card.FAILED::before    { background: var(--red); }
+.node-card.RECOVERING::before{ background: var(--purple); }
+.node-card:hover { border-color: var(--accent); box-shadow: 0 0 20px rgba(0,212,255,0.08); transform: translateY(-1px); }
+.node-card.FAILED { opacity: 0.6; }
+.node-name { font-weight: 700; font-size: 14px; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+.node-status-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.ONLINE .node-status-dot    { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.SUSPECTED .node-status-dot { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); animation: pulse 1s ease infinite; }
+.FAILED .node-status-dot    { background: var(--red); }
+.RECOVERING .node-status-dot{ background: var(--purple); animation: pulse 0.8s ease infinite; }
+.node-status-text { font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase; }
+.ONLINE .node-status-text    { color: var(--green); }
+.SUSPECTED .node-status-text { color: var(--yellow); }
+.FAILED .node-status-text    { color: var(--red); }
+.RECOVERING .node-status-text{ color: var(--purple); }
+.storage-bar-wrap { margin: 10px 0 6px; }
+.storage-bar-bg {
+  height: 4px; background: var(--border); border-radius: 2px; overflow: hidden;
+}
+.storage-bar-fill {
+  height: 100%; border-radius: 2px; transition: width 0.6s ease;
+}
+.node-stats { display: flex; justify-content: space-between; font-size: 10px; color: var(--dim); }
+.node-files { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 4px; }
+.file-tag {
+  font-size: 9px; padding: 2px 6px;
+  background: rgba(0,212,255,0.08);
+  border: 1px solid rgba(0,212,255,0.2);
+  border-radius: 3px; color: var(--accent);
+}
+.node-actions { display: flex; gap: 6px; margin-top: 10px; }
+.btn-sm {
+  font-family: var(--mono); font-size: 10px; font-weight: 600;
+  padding: 4px 10px; border-radius: 3px; border: 1px solid;
+  cursor: pointer; transition: all 0.15s; letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.btn-kill  { border-color: var(--red);   color: var(--red);   background: transparent; }
+.btn-kill:hover  { background: rgba(255,71,87,0.12); }
+.btn-revive{ border-color: var(--green); color: var(--green); background: transparent; }
+.btn-revive:hover{ background: rgba(57,211,83,0.12); }
+
+/* ── Files Table ── */
+.files-section { flex: 1 1 auto; overflow: auto; }
+.files-table { width: 100%; border-collapse: collapse; }
+.files-table th {
+  text-align: left; padding: 8px 14px;
+  font-size: 9px; letter-spacing: 2px; text-transform: uppercase;
+  color: var(--dim); border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; background: var(--panel); font-weight: 400;
+}
+.files-table td { padding: 10px 14px; border-bottom: 1px solid rgba(30,45,61,0.5); }
+.files-table tr:hover td { background: rgba(0,212,255,0.03); }
+.tier-badge {
+  display: inline-block; font-size: 9px; font-weight: 700;
+  padding: 2px 8px; border-radius: 3px; letter-spacing: 1px; text-transform: uppercase;
+}
+.tier-HOT  { background: rgba(255,71,87,0.15);  color: var(--hot);  border: 1px solid rgba(255,71,87,0.3); }
+.tier-WARM { background: rgba(240,192,64,0.15); color: var(--warm); border: 1px solid rgba(240,192,64,0.3); }
+.tier-COLD { background: rgba(0,212,255,0.1);   color: var(--cold); border: 1px solid rgba(0,212,255,0.2); }
+.score-bar-wrap { display: flex; align-items: center; gap: 8px; }
+.score-bar-bg { width: 60px; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.score-bar-fill { height: 100%; border-radius: 2px; }
+.replica-dots { display: flex; flex-wrap: wrap; gap: 4px; }
+.rep-dot {
+  font-size: 9px; padding: 1px 6px;
+  border-radius: 3px; font-weight: 600;
+}
+.under-warn { color: var(--yellow); font-size: 10px; white-space: nowrap; }
+
+/* ── Side Column ── */
+.actions-panel { flex: 0 0 auto; }
+.action-form { padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+.field-row { display: flex; gap: 6px; align-items: center; }
+.field-label { font-size: 10px; color: var(--dim); width: 52px; flex-shrink: 0; letter-spacing: 0.5px; }
+input[type=text], input[type=number], select {
+  flex: 1; background: var(--bg); border: 1px solid var(--border);
+  color: var(--text); font-family: var(--mono); font-size: 12px;
+  padding: 6px 10px; border-radius: 4px; outline: none;
+  transition: border-color 0.2s;
+}
+input:focus, select:focus { border-color: var(--accent); }
+select option { background: var(--panel); }
+.btn {
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  padding: 8px 14px; border-radius: 4px; border: 1px solid;
+  cursor: pointer; transition: all 0.15s; letter-spacing: 1px;
+  text-transform: uppercase; width: 100%;
+}
+.btn-primary { border-color: var(--accent); color: var(--accent); background: rgba(0,212,255,0.08); }
+.btn-primary:hover { background: rgba(0,212,255,0.18); box-shadow: 0 0 12px rgba(0,212,255,0.2); }
+.btn-danger { border-color: var(--red); color: var(--red); background: rgba(255,71,87,0.08); }
+.btn-danger:hover { background: rgba(255,71,87,0.18); }
+.btn-success { border-color: var(--green); color: var(--green); background: rgba(57,211,83,0.08); }
+.btn-success:hover { background: rgba(57,211,83,0.18); }
+.btn-warn { border-color: var(--yellow); color: var(--yellow); background: rgba(240,192,64,0.08); }
+.btn-warn:hover { background: rgba(240,192,64,0.18); }
+.action-tabs { display: flex; border-bottom: 1px solid var(--border); }
+.action-tab {
+  flex: 1; padding: 9px 6px; font-size: 10px; font-weight: 700;
+  letter-spacing: 1px; text-transform: uppercase; text-align: center;
+  cursor: pointer; color: var(--dim); border-bottom: 2px solid transparent;
+  transition: all 0.15s; background: none; border-left: none; border-right: none; border-top: none;
+  font-family: var(--mono);
+}
+.action-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.action-tab:hover { color: var(--text); }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+.toast {
+  position: fixed; bottom: 24px; right: 24px; z-index: 9000;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 6px; padding: 12px 18px; font-size: 12px;
+  max-width: 320px; opacity: 0; transform: translateY(10px);
+  transition: all 0.3s; pointer-events: none;
+}
+.toast.show { opacity: 1; transform: translateY(0); }
+.toast.ok   { border-color: var(--green); color: var(--green); }
+.toast.err  { border-color: var(--red);   color: var(--red); }
+.toast.warn { border-color: var(--yellow);color: var(--yellow); }
+
+/* ── Event Log ── */
+.log-panel { flex: 1 1 auto; overflow: hidden; display: flex; flex-direction: column; }
+.log-stream { flex: 1; overflow-y: auto; padding: 0; }
+.log-entry {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 6px 16px; border-bottom: 1px solid rgba(30,45,61,0.4);
+  font-size: 11px; animation: fadeIn 0.3s ease;
+  transition: background 0.2s;
+}
+.log-entry:hover { background: rgba(255,255,255,0.02); }
+@keyframes fadeIn { from { opacity: 0; transform: translateX(-4px); } to { opacity: 1; transform: translateX(0); } }
+.log-time { color: var(--dim); white-space: nowrap; flex-shrink: 0; font-size: 10px; padding-top: 1px; }
+.log-type {
+  font-weight: 700; font-size: 9px; letter-spacing: 1px;
+  white-space: nowrap; flex-shrink: 0; padding-top: 2px;
+  min-width: 82px; text-transform: uppercase;
+}
+.log-type.FAILURE    { color: var(--red); }
+.log-type.RECOVERY,.log-type.ONLINE { color: var(--green); }
+.log-type.REPLICATION{ color: var(--accent); }
+.log-type.ACCESS     { color: var(--purple); }
+.log-type.WARNING    { color: var(--yellow); }
+.log-type.WRITE      { color: #39d353; }
+.log-type.COORDINATOR{ color: var(--textdim); }
+.log-type.SUSPECTED  { color: var(--yellow); }
+.log-type.DETECTOR   { color: var(--textdim); }
+.log-type.CRITICAL   { color: var(--red); }
+.log-type.RECOVERING { color: var(--purple); }
+.log-type.INTEGRITY  { color: var(--red); font-weight: 700; }
+.log-type.RECONCILE  { color: var(--accent); }
+.log-msg { color: var(--text); line-height: 1.4; }
+
+/* ── Scrollbars ── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--dim); }
+
+/* ── Responsive ── */
+@media (max-width: 1100px) {
+  .layout { grid-template-columns: 1fr; grid-template-rows: auto auto 1fr auto; }
+  .main-col { border-right: none; }
+  .metrics-row { grid-template-columns: repeat(3, 1fr); }
+}
+
+.uptime-badge {
+  font-size: 10px; color: var(--dim); display: flex; align-items: center; gap: 6px;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <div class="logo">DFS<span>/control</span></div>
+    <div class="system-id">Distributed File System · v2.0</div>
+  </div>
+  <div class="status-bar">
+    <div class="stat-pill"><div class="pulse"></div> <span>Live</span></div>
+    <div class="stat-pill">Uptime: <strong id="hdr-uptime">0s</strong></div>
+    <div class="stat-pill">Nodes: <strong id="hdr-nodes">–</strong></div>
+    <div class="stat-pill">Files: <strong id="hdr-files">–</strong></div>
+    <div class="stat-pill">Storage: <strong id="hdr-storage">–</strong></div>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- ── Main Column ── -->
+  <div class="main-col">
+
+    <!-- Metrics -->
+    <div class="metrics-row">
+      <div class="metric">
+        <div class="metric-label">Read Throughput</div>
+        <div class="metric-value green" id="m-throughput">0</div>
+        <div class="metric-sub">req/s</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Avg Read Latency</div>
+        <div class="metric-value" id="m-read-lat">0</div>
+        <div class="metric-sub">ms</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Avg Write Latency</div>
+        <div class="metric-value" id="m-write-lat">0</div>
+        <div class="metric-sub">ms</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Detection Time</div>
+        <div class="metric-value yellow" id="m-detect">—</div>
+        <div class="metric-sub">sec (phi accrual)</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Recovery Time</div>
+        <div class="metric-value" id="m-recover">—</div>
+        <div class="metric-sub">sec avg</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Total Reads</div>
+        <div class="metric-value" id="m-reads">0</div>
+        <div class="metric-sub" id="m-writes-sub">0 writes</div>
+      </div>
+    </div>
+
+    <!-- Nodes -->
+    <div class="panel nodes-section">
+      <div class="panel-header">
+        <div class="panel-title"><span class="icon">◈</span>Storage Nodes</div>
+        <span id="node-count-badge" style="font-size:10px;color:var(--dim)"></span>
+      </div>
+      <div class="nodes-grid" id="nodes-grid"></div>
+    </div>
+
+    <!-- Files -->
+    <div class="panel files-section">
+      <div class="panel-header">
+        <div class="panel-title"><span class="icon">◉</span>File Registry</div>
+        <span style="font-size:10px;color:var(--dim)" id="files-info"></span>
+      </div>
+      <table class="files-table">
+        <thead>
+          <tr>
+            <th>File ID</th>
+            <th>Size</th>
+            <th>Score</th>
+            <th>Tier</th>
+            <th>Replicas (target)</th>
+            <th>Checksum</th>
+            <th>Health</th>
+          </tr>
+        </thead>
+        <tbody id="files-tbody"></tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <!-- ── Side Column ── -->
+  <div class="side-col">
+
+    <!-- Actions -->
+    <div class="panel actions-panel">
+      <div class="panel-header">
+        <div class="panel-title"><span class="icon">⌘</span>Control Panel</div>
+      </div>
+      <div class="action-tabs">
+        <button class="action-tab active" onclick="switchTab('write')">Write</button>
+        <button class="action-tab" onclick="switchTab('read')">Read</button>
+        <button class="action-tab" onclick="switchTab('burst')">Burst</button>
+        <button class="action-tab" onclick="switchTab('node')">Node</button>
+      </div>
+
+      <!-- Write tab -->
+      <div class="tab-content active" id="tab-write">
+        <div class="action-form">
+          <div class="field-row"><div class="field-label">File ID</div><input type="text" id="w-fileid" placeholder="e.g. logs_nov"></div>
+          <div class="field-row"><div class="field-label">Size MB</div><input type="number" id="w-size" placeholder="25" min="1" max="500"></div>
+          <div class="field-row"><div class="field-label">Checksum</div><input type="text" id="w-cksum" placeholder="optional"></div>
+          <button class="btn btn-primary" onclick="doWrite()">▶ Write File</button>
+        </div>
+      </div>
+
+      <!-- Read tab -->
+      <div class="tab-content" id="tab-read">
+        <div class="action-form">
+          <div class="field-row"><div class="field-label">File</div>
+            <select id="r-fileid"><option value="">— select —</option></select>
+          </div>
+          <div class="field-row"><div class="field-label">Requester</div>
+            <select id="r-nodeid"><option value="">— any (load balanced) —</option></select>
+          </div>
+          <button class="btn btn-primary" onclick="doRead()">▶ Route Read</button>
+          <div id="read-result" style="font-size:11px;color:var(--dim);min-height:18px;padding:2px 0;"></div>
+        </div>
+      </div>
+
+      <!-- Burst tab -->
+      <div class="tab-content" id="tab-burst">
+        <div class="action-form">
+          <p style="font-size:10px;color:var(--dim);line-height:1.5;">
+            Simulate access bursts to raise a file's score.<br>
+            ≥50 → <span style="color:var(--hot)">HOT</span> (3 replicas) ·
+            ≥10 → <span style="color:var(--warm)">WARM</span> (2) ·
+            &lt;10 → <span style="color:var(--cold)">COLD</span> (1)
+          </p>
+          <div class="field-row"><div class="field-label">File</div>
+            <select id="b-fileid"><option value="">— select —</option></select>
+          </div>
+          <div class="field-row"><div class="field-label">Reads</div>
+            <input type="number" id="b-count" placeholder="60" min="1" max="500">
+          </div>
+          <button class="btn btn-warn" onclick="doBurst()">⚡ Simulate Burst</button>
+        </div>
+      </div>
+
+      <!-- Node tab -->
+      <div class="tab-content" id="tab-node">
+        <div class="action-form">
+          <p style="font-size:10px;color:var(--dim);margin-bottom:4px;">Add Node</p>
+          <div class="field-row"><div class="field-label">Node ID</div><input type="text" id="n-id" placeholder="node5"></div>
+          <div class="field-row"><div class="field-label">Cap MB</div><input type="number" id="n-cap" placeholder="500" min="10"></div>
+          <button class="btn btn-success" onclick="doAddNode()">＋ Add Node</button>
+          <hr style="border-color:var(--border);margin:4px 0;">
+          <p style="font-size:10px;color:var(--dim);margin-bottom:4px;">Kill / Revive</p>
+          <div class="field-row"><div class="field-label">Node</div>
+            <select id="k-nodeid"><option value="">— select —</option></select>
+          </div>
+          <div style="display:flex;gap:6px;">
+            <button class="btn btn-danger" style="flex:1" onclick="doKill()">✗ Kill</button>
+            <button class="btn btn-success" style="flex:1" onclick="doRevive()">↻ Revive</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Event Log -->
+    <div class="panel log-panel">
+      <div class="panel-header">
+        <div class="panel-title"><span class="icon">◈</span>Event Stream</div>
+        <span id="log-count" style="font-size:10px;color:var(--dim)"></span>
+      </div>
+      <div class="log-stream" id="log-stream"></div>
+    </div>
+
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── Node colour palette ──────────────────────────────────────
+const NODE_COLORS = {
+  node1: '#00d4ff', node2: '#39d353',
+  node3: '#ff6b35', node4: '#bd93f9',
+  node5: '#f0c040', node6: '#ff4757',
+};
+function nodeColor(id) { return NODE_COLORS[id] || '#c9d1d9'; }
+
+// ── Tab management ─────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.action-tab').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  document.querySelectorAll('.action-tab').forEach(el => {
+    if (el.textContent.toLowerCase().startsWith(name[0])) el.classList.add('active');
+  });
+}
+
+// ── Toast ──────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg, type = 'ok') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+// ── State ──────────────────────────────────────────────────────
+let lastEventCount = 0;
+let knownEventIds = new Set();
+
+// ── Render helpers ─────────────────────────────────────────────
+function storageBarColor(used, cap) {
+  const pct = cap > 0 ? used / cap : 0;
+  if (pct > 0.85) return 'var(--red)';
+  if (pct > 0.65) return 'var(--yellow)';
+  return 'var(--green)';
+}
+
+function fmtScore(score) {
+  if (score >= 50) return `<span style="color:var(--hot)">${score.toFixed(1)}</span>`;
+  if (score >= 10) return `<span style="color:var(--warm)">${score.toFixed(1)}</span>`;
+  return `<span style="color:var(--cold)">${score.toFixed(1)}</span>`;
+}
+
+function fmtTs(ts) {
+  const d = new Date(ts * 1000);
+  return d.toTimeString().slice(0, 8);
+}
+
+// ── Render nodes ────────────────────────────────────────────────
+function renderNodes(nodes) {
+  const grid = document.getElementById('nodes-grid');
+  const online = nodes.filter(n => n.status === 'ONLINE').length;
+  document.getElementById('node-count-badge').textContent =
+    `${online}/${nodes.length} online`;
+
+  // Update header
+  document.getElementById('hdr-nodes').textContent =
+    `${online}/${nodes.length}`;
+
+  // Build node cards
+  let html = '';
+  for (const n of nodes) {
+    const pct    = n.capacityMB > 0 ? (n.usedMB / n.capacityMB) : 0;
+    const barW   = Math.round(pct * 100);
+    const barCol = storageBarColor(n.usedMB, n.capacityMB);
+    const nc     = nodeColor(n.nodeId);
+    const fileTags = n.localFiles.map(f =>
+      `<span class="file-tag" style="color:${nc};border-color:${nc}40;background:${nc}10">${f}</span>`
+    ).join('');
+    const killBtn   = n.status !== 'FAILED'
+      ? `<button class="btn-sm btn-kill" onclick="quickKill('${n.nodeId}')">Kill</button>` : '';
+    const reviveBtn = n.status === 'FAILED'
+      ? `<button class="btn-sm btn-revive" onclick="quickRevive('${n.nodeId}')">Revive</button>` : '';
+
+    html += `
+    <div class="node-card ${n.status}">
+      <div class="node-name">
+        <div class="node-status-dot"></div>
+        <span style="color:${nc}">${n.nodeId}</span>
+        <span class="node-status-text">${n.status}</span>
+      </div>
+      <div class="storage-bar-wrap">
+        <div class="storage-bar-bg">
+          <div class="storage-bar-fill" style="width:${barW}%;background:${barCol}"></div>
+        </div>
+      </div>
+      <div class="node-stats">
+        <span>${n.usedMB}/${n.capacityMB}MB used</span>
+        <span>load: ${n.currentLoad}</span>
+      </div>
+      <div class="node-files">${fileTags || '<span style="color:var(--dim);font-size:9px">empty</span>'}</div>
+      <div class="node-actions">${killBtn}${reviveBtn}</div>
+    </div>`;
+  }
+  grid.innerHTML = html;
+}
+
+// ── Render files ────────────────────────────────────────────────
+function renderFiles(files) {
+  const tbody = document.getElementById('files-tbody');
+  const under = files.filter(f => f.underReplicated).length;
+  document.getElementById('files-info').textContent =
+    under > 0 ? `⚠ ${under} under-replicated` : `${files.length} files`;
+  document.getElementById('hdr-files').textContent = files.length;
+
+  let html = '';
+  for (const f of files) {
+    const scoreW  = Math.min(f.accessScore / 80 * 100, 100);
+    const scoreCol = f.accessScore >= 50 ? 'var(--hot)' : f.accessScore >= 10 ? 'var(--warm)' : 'var(--cold)';
+    const repDots = f.replicas.map(r => {
+      const nc = nodeColor(r);
+      return `<span class="rep-dot" style="background:${nc}18;color:${nc};border:1px solid ${nc}40">${r}</span>`;
+    }).join('');
+    const health = f.underReplicated
+      ? `<span class="under-warn">⚠ needs ${f.targetReplicas}</span>`
+      : `<span style="color:var(--green);font-size:10px">✓ ok</span>`;
+
+    html += `<tr>
+      <td style="font-weight:600;color:var(--text)">${f.fileId}</td>
+      <td style="color:var(--dim)">${f.sizeMB}MB</td>
+      <td>
+        <div class="score-bar-wrap">
+          ${fmtScore(f.accessScore)}
+          <div class="score-bar-bg">
+            <div class="score-bar-fill" style="width:${scoreW}%;background:${scoreCol}"></div>
+          </div>
+        </div>
+      </td>
+      <td><span class="tier-badge tier-${f.tier}">${f.tier}</span></td>
+      <td><div class="replica-dots">${repDots || '<span style="color:var(--red)">LOST</span>'}</div>
+          <span style="font-size:9px;color:var(--dim)">(target ${f.targetReplicas})</span></td>
+      <td style="font-size:10px;color:var(--dim);font-family:var(--mono)">${f.checksum ? f.checksum.slice(0,14) : '<span style="color:var(--dim);opacity:0.4">—</span>'}</td>
+      <td>${health}</td>
+    </tr>`;
+  }
+  tbody.innerHTML = html;
+
+  // populate dropdowns (preserve current selection)
+  const opts = files.map(f => `<option value="${f.fileId}">${f.fileId}</option>`).join('');
+  const rSel = document.getElementById('r-fileid').value;
+  const bSel = document.getElementById('b-fileid').value;
+  document.getElementById('r-fileid').innerHTML = '<option value="">— select —</option>' + opts;
+  document.getElementById('b-fileid').innerHTML = '<option value="">— select —</option>' + opts;
+  if (rSel) document.getElementById('r-fileid').value = rSel;
+  if (bSel) document.getElementById('b-fileid').value = bSel;
+}
+
+// ── Render metrics ──────────────────────────────────────────────
+function renderMetrics(m, nodes) {
+  document.getElementById('m-throughput').textContent = m.throughput;
+  document.getElementById('m-read-lat').textContent   = m.avgReadMs;
+  document.getElementById('m-write-lat').textContent  = m.avgWriteMs;
+  document.getElementById('m-detect').textContent     = m.avgDetectionS != null ? m.avgDetectionS + 's' : '—';
+  document.getElementById('m-recover').textContent    = m.avgRecoveryS != null ? m.avgRecoveryS + 's' : '—';
+  document.getElementById('m-reads').textContent      = m.readCount;
+  document.getElementById('m-writes-sub').textContent = `${m.writeCount} writes`;
+  document.getElementById('hdr-uptime').textContent   = m.uptime + 's';
+  document.getElementById('hdr-storage').textContent  = m.storageEfficiency + '%';
+
+  // color detection time
+  const det = document.getElementById('m-detect');
+  const ds  = m.avgDetectionS;
+  det.className = 'metric-value ' + (ds == null ? '' : ds < 3 ? 'green' : ds < 7 ? 'yellow' : 'red');
+}
+
+// ── Render events ───────────────────────────────────────────────
+function renderEvents(events) {
+  const stream = document.getElementById('log-stream');
+  document.getElementById('log-count').textContent = events.length + ' events';
+
+  // Only prepend new events (avoid full redraw flicker)
+  const newEvts = events.filter(e => !knownEventIds.has(e.timestamp + e.message));
+  for (const e of newEvts) {
+    knownEventIds.add(e.timestamp + e.message);
+    const div = document.createElement('div');
+    div.className = 'log-entry';
+    div.innerHTML = `
+      <span class="log-time">${fmtTs(e.timestamp)}</span>
+      <span class="log-type ${e.type}">${e.type}</span>
+      <span class="log-msg">${e.message}</span>`;
+    stream.prepend(div);
+  }
+  // Trim to 80 displayed
+  while (stream.children.length > 80) stream.removeChild(stream.lastChild);
+}
+
+// ── Render node selects ─────────────────────────────────────────
+function renderNodeSelects(nodes) {
+  const opts = nodes.map(n => `<option value="${n.nodeId}">${n.nodeId} (${n.status})</option>`).join('');
+  const kSel = document.getElementById('k-nodeid').value;
+  const rSel = document.getElementById('r-nodeid').value;
+  document.getElementById('k-nodeid').innerHTML = '<option value="">— select —</option>' + opts;
+  document.getElementById('r-nodeid').innerHTML = '<option value="">— any (load balanced) —</option>' + opts;
+  if (kSel) document.getElementById('k-nodeid').value = kSel;
+  if (rSel) document.getElementById('r-nodeid').value = rSel;
+}
+
+// ── Poll loop ───────────────────────────────────────────────────
+async function poll() {
+  try {
+    const res  = await fetch('/api/state');
+    const data = await res.json();
+    renderNodes(data.nodes);
+    renderFiles(data.files);
+    renderMetrics(data.metrics, data.nodes);
+    renderEvents(data.events);
+    renderNodeSelects(data.nodes);
+  } catch (e) {
+    console.error('Poll error:', e);
+  }
+}
+
+// ── Actions ─────────────────────────────────────────────────────
+async function post(url, body) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body),
+  });
+  return res.json();
+}
+
+async function doWrite() {
+  const fid  = document.getElementById('w-fileid').value.trim();
+  const size = parseFloat(document.getElementById('w-size').value);
+  const ck   = document.getElementById('w-cksum').value.trim();
+  if (!fid || !size) { showToast('File ID and size are required', 'warn'); return; }
+  const r = await post('/api/file/write', {fileId: fid, sizeMB: size, checksum: ck});
+  if (r.ok) {
+    showToast(`✓ ${fid} written → ${r.seed || 'no node'}`, 'ok');
+    document.getElementById('w-fileid').value = '';
+    document.getElementById('w-size').value   = '';
+    document.getElementById('w-cksum').value  = '';
+    poll();
+  } else {
+    showToast(`✗ ${r.seed}`, 'err');
+  }
+}
+
+async function doRead() {
+  const fid = document.getElementById('r-fileid').value;
+  const nid = document.getElementById('r-nodeid').value;
+  if (!fid) { showToast('Select a file', 'warn'); return; }
+  const r = await post('/api/file/read', {fileId: fid, requestingNode: nid || null});
+  const el = document.getElementById('read-result');
+  if (r.ok) {
+    const reqLabel = nid ? `<span style="color:${nodeColor(nid)};font-weight:700">${nid}</span> → ` : '';
+    el.innerHTML = `${reqLabel}Served by <span style="color:${nodeColor(r.node)};font-weight:700">${r.node}</span>`;
+    showToast(`Read routed to ${r.node}`, 'ok');
+  } else {
+    el.innerHTML = `<span style="color:var(--red)">No online replica</span>`;
+    showToast('No online replica available', 'err');
+  }
+  poll();
+}
+
+async function doBurst() {
+  const fid   = document.getElementById('b-fileid').value;
+  const count = parseInt(document.getElementById('b-count').value);
+  if (!fid || !count) { showToast('Select file and count', 'warn'); return; }
+  const r = await post('/api/file/burst', {fileId: fid, count});
+  if (r.ok) {
+    showToast(`⚡ ${count} accesses on ${fid}`, 'ok');
+    poll();
+  } else {
+    showToast(r.err || 'Error', 'err');
+  }
+}
+
+async function doAddNode() {
+  const nid = document.getElementById('n-id').value.trim();
+  const cap = parseFloat(document.getElementById('n-cap').value);
+  if (!nid || !cap) { showToast('Node ID and capacity required', 'warn'); return; }
+  const r = await post('/api/node/add', {nodeId: nid, capacityMB: cap});
+  if (r.ok) {
+    showToast(`✓ Node ${nid} joined cluster`, 'ok');
+    document.getElementById('n-id').value  = '';
+    document.getElementById('n-cap').value = '';
+    poll();
+  } else {
+    showToast(r.msg, 'err');
+  }
+}
+
+async function doKill() {
+  const nid = document.getElementById('k-nodeid').value;
+  if (!nid) { showToast('Select a node', 'warn'); return; }
+  quickKill(nid);
+}
+
+async function quickKill(nid) {
+  const r = await post('/api/node/kill', {nodeId: nid});
+  if (r.ok) {
+    showToast(`✗ ${nid} killed — ${r.msg}`, 'err');
+    poll();
+  } else {
+    showToast(r.msg, 'warn');
+  }
+}
+
+async function doRevive() {
+  const nid = document.getElementById('k-nodeid').value;
+  if (!nid) { showToast('Select a node', 'warn'); return; }
+  quickRevive(nid);
+}
+
+async function quickRevive(nid) {
+  const r = await post('/api/node/revive', {nodeId: nid});
+  if (r.ok) {
+    showToast(`↻ ${nid} reviving…`, 'ok');
+    poll();
+  } else {
+    showToast(r.msg, 'warn');
+  }
+}
+
+// ── Tab button matching ──────────────────────────────────────────
+document.querySelectorAll('.action-tab').forEach((btn, i) => {
+  const tabs = ['write','read','burst','node'];
+  btn.onclick = () => switchTab(tabs[i]);
+});
+
+// ── Start ────────────────────────────────────────────────────────
+poll();
+setInterval(poll, 1500);
+</script>
+</body>
+</html>
